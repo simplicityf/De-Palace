@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/password-input";
 import {
   Dialog,
   DialogContent,
@@ -72,10 +73,9 @@ export function StaffFormDialog({
             <Label htmlFor="staff-password">
               {staff ? "New password (optional)" : "Temporary password"}
             </Label>
-            <Input
+            <PasswordInput
               id="staff-password"
               name="password"
-              type="text"
               minLength={8}
               required={!staff}
             />
