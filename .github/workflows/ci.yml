@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [production]
+  pull_request:
+    branches: [production]
+
+jobs:
+  lint-typecheck-build:
+    runs-on: ubuntu-latest
+    env:
+      # Dummy values so the build doesn't fail on missing env vars.
+      # Real values (Neon DATABASE_URL, AUTH_SECRET, etc.) live in Vercel's
+      # project settings, not here — this job never talks to the real DB.
+      DATABASE_URL: postgresql://user:password@localhost:5432/depalace
+      AUTH_SECRET: ci-placeholder-secret-not-used-in-production
+      NEXTAUTH_URL: http://localhost:3000
+      GMAIL_USER: ci@example.com
+      GMAIL_APP_PASSWORD: placeholder
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
