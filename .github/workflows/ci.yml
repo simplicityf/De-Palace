@@ -35,8 +35,10 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Type-check
-        run: npx tsc --noEmit
-
+      # `next build` runs a full TypeScript check as part of its own build
+      # steps, so there's no separate `tsc --noEmit` step here — running one
+      # before a build exists would fail anyway, since Next.js only generates
+      # next-env.d.ts / .next/types (needed for image imports, route props,
+      # etc.) during `next dev` or `next build` itself.
       - name: Build
         run: npm run build
