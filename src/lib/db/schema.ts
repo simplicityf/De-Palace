@@ -63,9 +63,14 @@ export const shifts = pgTable("shifts", {
 
 export const sales = pgTable("sales", {
   id: uuid("id").primaryKey().defaultRandom(),
-  shiftId: uuid("shift_id")
-    .notNull()
-    .references(() => shifts.id, { onDelete: "restrict" }),
+  // Nullable: sales recorded directly by an admin (not tied to a staff
+  // shift) have no shiftId — recordedByUserId identifies who logged those.
+  shiftId: uuid("shift_id").references(() => shifts.id, {
+    onDelete: "restrict",
+  }),
+  recordedByUserId: uuid("recorded_by_user_id").references(() => users.id, {
+    onDelete: "restrict",
+  }),
   itemId: uuid("item_id")
     .notNull()
     .references(() => items.id, { onDelete: "restrict" }),

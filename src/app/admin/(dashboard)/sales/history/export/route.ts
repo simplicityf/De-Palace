@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import { items, sales, shifts, users } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { formatNaira } from "@/lib/currency";
+
+const recordedByUser = alias(users, "recorded_by_user");
 
 function csvCell(value: string) {
   if (/[",\n]/.test(value)) {
@@ -35,15 +38,17 @@ export async function GET(request: NextRequest) {
   const rows = await db
     .select({
       soldAt: sales.soldAt,
-      assistantName: users.name,
+      shiftAssistantName: users.name,
+      recordedByName: recordedByUser.name,
       itemName: items.name,
       quantitySold: sales.quantitySold,
       totalAmount: sales.totalAmount,
     })
     .from(sales)
     .innerJoin(items, eq(sales.itemId, items.id))
-    .innerJoin(shifts, eq(sales.shiftId, shifts.id))
-    .innerJoin(users, eq(shifts.salesAssistantId, users.id))
+    .leftJoin(shifts, eq(sales.shiftId, shifts.id))
+    .leftJoin(users, eq(shifts.salesAssistantId, users.id))
+    .leftJoin(recordedByUser, eq(sales.recordedByUserId, recordedByUser.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(sales.soldAt));
 
@@ -53,10 +58,12 @@ export async function GET(request: NextRequest) {
   const lines = [header.map(csvCell).join(",")];
 
   for (const row of rows) {
+    const staffLabel =
+      row.shiftAssistantName ?? (row.recordedByName ? `${row.recordedByName} (Admin)` : "Admin");
     lines.push(
       [
         row.soldAt.toLocaleString(),
-        row.assistantName,
+        staffLabel,
         row.itemName,
         String(row.quantitySold),
         formatNaira(row.totalAmount),

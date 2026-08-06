@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import { items, sales, shifts, users } from "@/lib/db/schema";
+
+const recordedByUser = alias(users, "recorded_by_user");
 import {
   Table,
   TableBody,
@@ -43,21 +46,28 @@ export default async function SalesHistoryPage({
     conditions.push(lt(sales.soldAt, end));
   }
 
-  const rows = await db
+  const rawRows = await db
     .select({
       id: sales.id,
       soldAt: sales.soldAt,
-      assistantName: users.name,
+      shiftAssistantName: users.name,
+      recordedByName: recordedByUser.name,
       itemName: items.name,
       quantitySold: sales.quantitySold,
       totalAmount: sales.totalAmount,
     })
     .from(sales)
     .innerJoin(items, eq(sales.itemId, items.id))
-    .innerJoin(shifts, eq(sales.shiftId, shifts.id))
-    .innerJoin(users, eq(shifts.salesAssistantId, users.id))
+    .leftJoin(shifts, eq(sales.shiftId, shifts.id))
+    .leftJoin(users, eq(shifts.salesAssistantId, users.id))
+    .leftJoin(recordedByUser, eq(sales.recordedByUserId, recordedByUser.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(sales.soldAt));
+
+  const rows = rawRows.map((row) => ({
+    ...row,
+    staffLabel: row.shiftAssistantName ?? (row.recordedByName ? `${row.recordedByName} (Admin)` : "Admin"),
+  }));
 
   const grandTotal = rows.reduce((sum, row) => sum + Number(row.totalAmount), 0);
 
@@ -169,7 +179,7 @@ export default async function SalesHistoryPage({
                 <TableCell className="text-muted-foreground">
                   {row.soldAt.toLocaleString()}
                 </TableCell>
-                <TableCell>{row.assistantName}</TableCell>
+                <TableCell>{row.staffLabel}</TableCell>
                 <TableCell>{row.itemName}</TableCell>
                 <TableCell className="text-right">{row.quantitySold}</TableCell>
                 <TableCell className="text-right">

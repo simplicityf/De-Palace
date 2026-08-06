@@ -33,11 +33,12 @@ export default async function MenuPage() {
 
   return (
     <div className="relative flex-1">
-      <div className="fixed inset-0 z-0 flex items-center justify-center bg-brand-cream">
+      <div className="fixed inset-0 z-0 overflow-hidden bg-brand-cream">
         <Image
           src={logoFull}
           alt=""
-          className="h-[90vh] w-auto max-w-none opacity-[0.06]"
+          fill
+          className="object-contain object-center p-12 opacity-[0.06]"
           priority
         />
       </div>

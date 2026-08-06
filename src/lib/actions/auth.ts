@@ -1,7 +1,7 @@
 "use server";
 
 import { AuthError } from "next-auth";
-import { signIn, signOut } from "@/lib/auth";
+import { auth, signIn, signOut } from "@/lib/auth";
 
 export type LoginState = { error?: string };
 
@@ -30,5 +30,7 @@ export async function loginSales(_prevState: LoginState, formData: FormData) {
 }
 
 export async function logout() {
-  await signOut({ redirectTo: "/" });
+  const session = await auth();
+  const redirectTo = session?.user?.role === "admin" ? "/admin/login" : "/sales/login";
+  await signOut({ redirectTo });
 }

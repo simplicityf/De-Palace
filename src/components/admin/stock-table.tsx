@@ -13,9 +13,9 @@ import {
 } from "@/components/ui/table";
 import { ItemFormDialog } from "@/components/admin/item-form-dialog";
 import { ArchiveItemButton } from "@/components/admin/archive-item-button";
+import { CategoryFilter } from "@/components/category-filter";
 import { updateItem } from "@/lib/actions/stock";
 import { formatNaira } from "@/lib/currency";
-import { cn } from "@/lib/utils";
 
 type Category = { id: string; name: string };
 type Item = {
@@ -57,23 +57,12 @@ export function StockTable({
           onChange={(e) => setQuery(e.target.value)}
           className="bg-white sm:max-w-xs"
         />
-        <div className="flex flex-wrap gap-2">
-          {categoryNames.map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setCategory(name)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs transition-colors",
-                category === name
-                  ? "border-brand-green bg-brand-green text-brand-cream"
-                  : "border-brand-green/30 text-brand-green hover:bg-brand-green/10",
-              )}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
+        <CategoryFilter
+          categories={categoryNames}
+          active={category}
+          onSelect={setCategory}
+          className="sm:min-w-0 sm:flex-1"
+        />
       </div>
 
       <div className="rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur">

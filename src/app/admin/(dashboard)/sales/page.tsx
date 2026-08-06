@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { sales, shifts, users } from "@/lib/db/schema";
+import { categories, items, sales, shifts, users } from "@/lib/db/schema";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -10,7 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { AdminRecordSaleModal } from "@/components/admin/admin-record-sale-modal";
 import { formatNaira } from "@/lib/currency";
+import { businessDayBounds } from "@/lib/date-range";
 
 export default async function CurrentSalesPage() {
   const totalsSubquery = db
@@ -23,21 +26,56 @@ export default async function CurrentSalesPage() {
     .groupBy(sales.shiftId)
     .as("totals");
 
-  const activeShifts = await db
-    .select({
-      id: shifts.id,
-      assistantName: users.name,
-      startedAt: shifts.startedAt,
-      total: totalsSubquery.total,
-      itemsSold: totalsSubquery.itemsSold,
-    })
-    .from(shifts)
-    .innerJoin(users, eq(shifts.salesAssistantId, users.id))
-    .leftJoin(totalsSubquery, eq(totalsSubquery.shiftId, shifts.id))
-    .where(eq(shifts.status, "active"))
-    .orderBy(shifts.startedAt);
+  const { start: startOfDay, end: endOfDay } = businessDayBounds();
 
-  const combinedTotal = activeShifts.reduce((sum, shift) => sum + (shift.total ?? 0), 0);
+  const [activeShifts, stock, adminSalesToday] = await Promise.all([
+    db
+      .select({
+        id: shifts.id,
+        assistantName: users.name,
+        startedAt: shifts.startedAt,
+        total: totalsSubquery.total,
+        itemsSold: totalsSubquery.itemsSold,
+      })
+      .from(shifts)
+      .innerJoin(users, eq(shifts.salesAssistantId, users.id))
+      .leftJoin(totalsSubquery, eq(totalsSubquery.shiftId, shifts.id))
+      .where(eq(shifts.status, "active"))
+      .orderBy(shifts.startedAt),
+    db
+      .select({
+        id: items.id,
+        name: items.name,
+        price: items.price,
+        quantity: items.quantity,
+      })
+      .from(items)
+      .innerJoin(categories, eq(items.categoryId, categories.id))
+      .where(eq(items.isArchived, false))
+      .orderBy(categories.name, items.name),
+    db
+      .select({
+        id: sales.id,
+        itemName: items.name,
+        quantitySold: sales.quantitySold,
+        totalAmount: sales.totalAmount,
+        soldAt: sales.soldAt,
+      })
+      .from(sales)
+      .innerJoin(items, eq(sales.itemId, items.id))
+      .where(
+        and(
+          isNull(sales.shiftId),
+          gte(sales.soldAt, startOfDay),
+          lte(sales.soldAt, endOfDay),
+        ),
+      )
+      .orderBy(desc(sales.soldAt)),
+  ]);
+
+  const shiftsTotal = activeShifts.reduce((sum, shift) => sum + (shift.total ?? 0), 0);
+  const adminTotal = adminSalesToday.reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
+  const combinedTotal = shiftsTotal + adminTotal;
 
   return (
     <div className="space-y-6">
@@ -52,11 +90,17 @@ export default async function CurrentSalesPage() {
             .
           </p>
         </div>
-        <div className="rounded-xl border border-brand-green/10 bg-white/90 px-6 py-4 text-right shadow-sm">
-          <p className="text-sm text-muted-foreground">Combined total</p>
-          <p className="font-serif text-2xl text-brand-green">
-            {formatNaira(combinedTotal)}
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="rounded-xl border border-brand-green/10 bg-white/90 px-6 py-4 text-right shadow-sm">
+            <p className="text-sm text-muted-foreground">Combined total</p>
+            <p className="font-serif text-2xl text-brand-green">
+              {formatNaira(combinedTotal)}
+            </p>
+          </div>
+          <AdminRecordSaleModal
+            items={stock}
+            trigger={<Button size="lg">Record sale</Button>}
+          />
         </div>
       </div>
 
@@ -96,6 +140,45 @@ export default async function CurrentSalesPage() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      <div>
+        <h2 className="mb-2 font-serif text-lg text-brand-green">
+          Recorded by you today
+        </h2>
+        <div className="rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>Item</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {adminSalesToday.map((sale) => (
+                <TableRow key={sale.id}>
+                  <TableCell className="text-muted-foreground">
+                    {sale.soldAt.toLocaleTimeString()}
+                  </TableCell>
+                  <TableCell>{sale.itemName}</TableCell>
+                  <TableCell className="text-right">{sale.quantitySold}</TableCell>
+                  <TableCell className="text-right">
+                    {formatNaira(sale.totalAmount)}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {adminSalesToday.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                    No admin-recorded sales today.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

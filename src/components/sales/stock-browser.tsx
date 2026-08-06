@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { CategoryFilter } from "@/components/category-filter";
 import { cn } from "@/lib/utils";
 import { formatNaira } from "@/lib/currency";
 
@@ -37,23 +38,12 @@ export function StockBrowser({ items }: { items: StockItem[] }) {
           onChange={(e) => setQuery(e.target.value)}
           className="sm:max-w-xs"
         />
-        <div className="flex flex-wrap gap-2">
-          {categories.map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setCategory(name)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs transition-colors",
-                category === name
-                  ? "border-brand-green bg-brand-green text-brand-cream"
-                  : "border-brand-green/30 text-brand-green hover:bg-brand-green/10",
-              )}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
+        <CategoryFilter
+          categories={categories}
+          active={category}
+          onSelect={setCategory}
+          className="sm:min-w-0 sm:flex-1"
+        />
       </div>
 
       <div className="divide-y rounded-lg border bg-white/90">

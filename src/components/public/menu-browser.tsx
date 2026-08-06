@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { CategoryFilter } from "@/components/category-filter";
 import { formatNaira } from "@/lib/currency";
 
 type MenuItem = {
@@ -25,23 +25,11 @@ export function MenuBrowser({ categories }: { categories: Category[] }) {
   return (
     <div>
       <div className="sticky top-16 z-20 -mx-6 mb-10 border-b border-brand-green/10 bg-brand-cream px-6 py-3 shadow-sm">
-        <div className="flex flex-wrap justify-center gap-2">
-          {["All", ...categories.map((c) => c.name)].map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setActive(name)}
-              className={cn(
-                "rounded-full border px-4 py-1.5 text-sm transition-colors",
-                active === name
-                  ? "border-brand-green bg-brand-green text-brand-cream"
-                  : "border-brand-green/30 text-brand-green hover:bg-brand-green/10",
-              )}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
+        <CategoryFilter
+          categories={["All", ...categories.map((c) => c.name)]}
+          active={active}
+          onSelect={setActive}
+        />
       </div>
 
       <div className="space-y-12">
