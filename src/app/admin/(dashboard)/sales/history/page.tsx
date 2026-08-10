@@ -77,11 +77,14 @@ export default async function SalesHistoryPage({
   if (to) exportParams.set("to", to);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-6 px-4 sm:px-0">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-serif text-2xl text-brand-green">Sales History</h1>
-          <p className="text-muted-foreground">
+          <h1 className="font-serif text-2xl sm:text-3xl text-brand-green">
+            Sales History
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Every sale recorded across all staff.{" "}
             <Link href="/admin/sales" className="underline">
               View current sales
@@ -89,80 +92,88 @@ export default async function SalesHistoryPage({
             .
           </p>
         </div>
-        <div className="rounded-xl border border-brand-green/10 bg-white/90 px-6 py-4 text-right shadow-sm">
-          <p className="text-sm text-muted-foreground">Grand total</p>
-          <p className="font-serif text-2xl text-brand-green">
+        <div className="rounded-xl border border-brand-green/10 bg-white/90 px-4 sm:px-6 py-3 sm:py-4 text-center sm:text-right shadow-sm">
+          <p className="text-xs sm:text-sm text-muted-foreground">Grand total</p>
+          <p className="font-serif text-xl sm:text-2xl text-brand-green">
             {formatNaira(grandTotal)}
           </p>
         </div>
       </div>
 
-      <form className="flex flex-wrap items-end gap-3" method="get">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Staff</label>
-          <Select
-            name="staff"
-            defaultValue={staffFilter}
-            items={assistants.map((a) => ({ value: a.id, label: a.name }))}
-          >
-            <SelectTrigger className="w-48 bg-white">
-              <SelectValue placeholder="All staff" />
-            </SelectTrigger>
-            <SelectContent>
-              {assistants.map((assistant) => (
-                <SelectItem key={assistant.id} value={assistant.id}>
-                  {assistant.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Filter Form */}
+      <form className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-3" method="get">
+        <div className="flex flex-col sm:flex-row gap-3 sm:flex-1">
+          <div className="space-y-1 flex-1 sm:flex-none">
+            <label className="text-sm font-medium">Staff</label>
+            <Select
+              name="staff"
+              defaultValue={staffFilter}
+              items={assistants.map((a) => ({ value: a.id, label: a.name }))}
+            >
+              <SelectTrigger className="w-full sm:w-48 bg-white">
+                <SelectValue placeholder="All staff" />
+              </SelectTrigger>
+              <SelectContent>
+                {assistants.map((assistant) => (
+                  <SelectItem key={assistant.id} value={assistant.id}>
+                    {assistant.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3 flex-1 sm:flex-none">
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="from">
+                From
+              </label>
+              <input
+                id="from"
+                name="from"
+                type="date"
+                defaultValue={from}
+                className="h-9 w-full rounded-md border bg-white px-3 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="to">
+                To
+              </label>
+              <input
+                id="to"
+                name="to"
+                type="date"
+                defaultValue={to}
+                className="h-9 w-full rounded-md border bg-white px-3 text-sm"
+              />
+            </div>
+          </div>
         </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium" htmlFor="from">
-            From
-          </label>
-          <input
-            id="from"
-            name="from"
-            type="date"
-            defaultValue={from}
-            className="h-9 rounded-md border bg-white px-3 text-sm"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium" htmlFor="to">
-            To
-          </label>
-          <input
-            id="to"
-            name="to"
-            type="date"
-            defaultValue={to}
-            className="h-9 rounded-md border bg-white px-3 text-sm"
-          />
-        </div>
-        <Button type="submit" variant="outline">
-          Filter
-        </Button>
-        {(staffFilter || from || to) && (
-          <Link
-            href="/admin/sales/history"
-            className="text-sm text-muted-foreground underline"
-          >
-            Clear
-          </Link>
-        )}
-        <a
-          href={`/admin/sales/history/export?${exportParams.toString()}`}
-          className="ml-auto"
-        >
-          <Button type="button" variant="outline">
-            Export CSV
+        <div className="flex items-center gap-3">
+          <Button type="submit" variant="outline" className="flex-1 sm:flex-none">
+            Filter
           </Button>
-        </a>
+          {(staffFilter || from || to) && (
+            <Link
+              href="/admin/sales/history"
+              className="text-sm text-muted-foreground underline whitespace-nowrap"
+            >
+              Clear
+            </Link>
+          )}
+          <a
+            href={`/admin/sales/history/export?${exportParams.toString()}`}
+            className="sm:ml-auto"
+          >
+            <Button type="button" variant="outline" className="w-full sm:w-auto">
+              Export CSV
+            </Button>
+          </a>
+        </div>
       </form>
 
-      <div className="rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur">
+      {/* Desktop Table View */}
+      <div className="hidden sm:block rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -176,13 +187,22 @@ export default async function SalesHistoryPage({
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.id}>
-                <TableCell className="text-muted-foreground">
-                  {row.soldAt.toLocaleString()}
+                <TableCell className="text-muted-foreground whitespace-nowrap">
+                  {row.soldAt.toLocaleString([], {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </TableCell>
-                <TableCell>{row.staffLabel}</TableCell>
-                <TableCell>{row.itemName}</TableCell>
+                <TableCell className="max-w-[150px] truncate">
+                  {row.staffLabel}
+                </TableCell>
+                <TableCell className="max-w-[200px] truncate">
+                  {row.itemName}
+                </TableCell>
                 <TableCell className="text-right">{row.quantitySold}</TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right font-medium">
                   {formatNaira(row.totalAmount)}
                 </TableCell>
               </TableRow>
@@ -208,6 +228,64 @@ export default async function SalesHistoryPage({
             </TableFooter>
           )}
         </Table>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="sm:hidden space-y-3">
+        {rows.length === 0 ? (
+          <div className="rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur p-6 text-center text-muted-foreground">
+            No sales found.
+          </div>
+        ) : (
+          <>
+            {rows.map((row) => (
+              <div
+                key={row.id}
+                className="rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur p-4 space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-medium truncate">{row.itemName}</h3>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {row.staffLabel}
+                    </p>
+                  </div>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap flex-shrink-0">
+                    {row.soldAt.toLocaleDateString([], {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <div className="space-x-4">
+                    <span className="text-muted-foreground">
+                      Qty: {row.quantitySold}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {row.soldAt.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                  <span className="font-medium text-brand-green">
+                    {formatNaira(row.totalAmount)}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {rows.length > 0 && (
+              <div className="rounded-xl border border-brand-green/10 bg-brand-green/5 p-4 flex items-center justify-between">
+                <span className="font-medium">Grand total</span>
+                <span className="font-serif text-lg font-medium text-brand-green">
+                  {formatNaira(grandTotal)}
+                </span>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

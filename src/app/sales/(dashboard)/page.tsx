@@ -60,28 +60,32 @@ export default async function SalesDashboardPage() {
   }));
 
   return (
-    <div className="space-y-8">
-      <div className="rounded-xl border border-brand-green/10 bg-white/90 p-6 shadow-sm backdrop-blur">
+    <div className="space-y-6 sm:space-y-8 px-4 sm:px-0">
+      {/* Shift Status Card */}
+      <div className="rounded-xl border border-brand-green/10 bg-white/90 p-4 sm:p-6 shadow-sm backdrop-blur">
         {activeShift ? (
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Shift in progress</p>
-              <h1 className="font-serif text-2xl text-brand-green">
-                Since {activeShift.startedAt.toLocaleTimeString()}
+              <h1 className="font-serif text-xl sm:text-2xl text-brand-green">
+                Since {activeShift.startedAt.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </h1>
             </div>
             <EndShiftButton shiftId={activeShift.id} />
           </div>
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <p className="text-sm text-muted-foreground">No active shift</p>
-              <h1 className="font-serif text-2xl text-brand-green">
+              <h1 className="font-serif text-xl sm:text-2xl text-brand-green">
                 Ready to start?
               </h1>
             </div>
             <form action={startShift}>
-              <Button type="submit" size="lg">
+              <Button type="submit" size="lg" className="w-full sm:w-auto">
                 Start shift
               </Button>
             </form>
@@ -89,26 +93,30 @@ export default async function SalesDashboardPage() {
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-brand-green/10 bg-white/90 p-6 shadow-sm backdrop-blur">
+      {/* Today's Stats Grid */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+        <div className="rounded-xl border border-brand-green/10 bg-white/90 p-4 sm:p-6 shadow-sm backdrop-blur">
           <p className="text-sm text-muted-foreground">Today&apos;s sales</p>
-          <p className="font-serif text-2xl text-brand-green">
+          <p className="font-serif text-xl sm:text-2xl text-brand-green">
             {formatNaira(todayRow?.total ?? 0)}
           </p>
         </div>
-        <div className="rounded-xl border border-brand-green/10 bg-white/90 p-6 shadow-sm backdrop-blur">
+        <div className="rounded-xl border border-brand-green/10 bg-white/90 p-4 sm:p-6 shadow-sm backdrop-blur">
           <p className="text-sm text-muted-foreground">Items sold today</p>
-          <p className="font-serif text-2xl text-brand-green">
+          <p className="font-serif text-xl sm:text-2xl text-brand-green">
             {todayRow?.items ?? 0}
           </p>
         </div>
       </div>
 
-      <div className="rounded-xl border border-brand-green/10 bg-white/90 p-6 shadow-sm backdrop-blur">
-        <h2 className="mb-4 font-serif text-lg text-brand-green">
+      {/* Sales Trend Chart */}
+      <div className="rounded-xl border border-brand-green/10 bg-white/90 p-4 sm:p-6 shadow-sm backdrop-blur overflow-x-auto">
+        <h2 className="mb-4 font-serif text-lg sm:text-xl text-brand-green">
           Last 7 days
         </h2>
-        <SalesTrendChart data={trendData} />
+        <div className="min-w-[300px]">
+          <SalesTrendChart data={trendData} />
+        </div>
       </div>
     </div>
   );

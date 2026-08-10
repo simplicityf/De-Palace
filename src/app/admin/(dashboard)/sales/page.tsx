@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import { categories, items, sales, shifts, users } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
@@ -15,33 +16,30 @@ import { AdminRecordSaleModal } from "@/components/admin/admin-record-sale-modal
 import { formatNaira } from "@/lib/currency";
 import { businessDayBounds } from "@/lib/date-range";
 
-export default async function CurrentSalesPage() {
-  const totalsSubquery = db
-    .select({
-      shiftId: sales.shiftId,
-      total: sql<number>`sum(${sales.totalAmount})`.mapWith(Number).as("total"),
-      itemsSold: sql<number>`sum(${sales.quantitySold})`.mapWith(Number).as("items_sold"),
-    })
-    .from(sales)
-    .groupBy(sales.shiftId)
-    .as("totals");
+const recordedByUser = alias(users, "recorded_by_user");
 
+export default async function CurrentSalesPage() {
   const { start: startOfDay, end: endOfDay } = businessDayBounds();
 
-  const [activeShifts, stock, adminSalesToday] = await Promise.all([
+  const [todaySales, stock] = await Promise.all([
     db
       .select({
-        id: shifts.id,
-        assistantName: users.name,
-        startedAt: shifts.startedAt,
-        total: totalsSubquery.total,
-        itemsSold: totalsSubquery.itemsSold,
+        id: sales.id,
+        soldAt: sales.soldAt,
+        itemName: items.name,
+        quantitySold: sales.quantitySold,
+        unitPriceAtSale: sales.unitPriceAtSale,
+        totalAmount: sales.totalAmount,
+        shiftAssistantName: users.name,
+        recordedByName: recordedByUser.name,
       })
-      .from(shifts)
-      .innerJoin(users, eq(shifts.salesAssistantId, users.id))
-      .leftJoin(totalsSubquery, eq(totalsSubquery.shiftId, shifts.id))
-      .where(eq(shifts.status, "active"))
-      .orderBy(shifts.startedAt),
+      .from(sales)
+      .innerJoin(items, eq(sales.itemId, items.id))
+      .leftJoin(shifts, eq(sales.shiftId, shifts.id))
+      .leftJoin(users, eq(shifts.salesAssistantId, users.id))
+      .leftJoin(recordedByUser, eq(sales.recordedByUserId, recordedByUser.id))
+      .where(and(gte(sales.soldAt, startOfDay), lte(sales.soldAt, endOfDay)))
+      .orderBy(desc(sales.soldAt)),
     db
       .select({
         id: items.id,
@@ -53,88 +51,97 @@ export default async function CurrentSalesPage() {
       .innerJoin(categories, eq(items.categoryId, categories.id))
       .where(eq(items.isArchived, false))
       .orderBy(categories.name, items.name),
-    db
-      .select({
-        id: sales.id,
-        itemName: items.name,
-        quantitySold: sales.quantitySold,
-        totalAmount: sales.totalAmount,
-        soldAt: sales.soldAt,
-      })
-      .from(sales)
-      .innerJoin(items, eq(sales.itemId, items.id))
-      .where(
-        and(
-          isNull(sales.shiftId),
-          gte(sales.soldAt, startOfDay),
-          lte(sales.soldAt, endOfDay),
-        ),
-      )
-      .orderBy(desc(sales.soldAt)),
   ]);
 
-  const shiftsTotal = activeShifts.reduce((sum, shift) => sum + (shift.total ?? 0), 0);
-  const adminTotal = adminSalesToday.reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
-  const combinedTotal = shiftsTotal + adminTotal;
+  const rows = todaySales.map((row) => ({
+    ...row,
+    staffLabel:
+      row.shiftAssistantName ??
+      (row.recordedByName ? `${row.recordedByName} (Admin)` : "Admin"),
+  }));
+
+  const combinedTotal = rows.reduce((sum, row) => sum + Number(row.totalAmount), 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-6 px-4 sm:px-0">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-serif text-2xl text-brand-green">Current Sales</h1>
-          <p className="text-muted-foreground">
-            Live view of shifts in progress right now.{" "}
+          <h1 className="font-serif text-2xl sm:text-3xl text-brand-green">
+            Current Sales
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Every sale recorded today.{" "}
             <Link href="/admin/sales/history" className="underline">
               See full history
             </Link>
             .
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="rounded-xl border border-brand-green/10 bg-white/90 px-6 py-4 text-right shadow-sm">
-            <p className="text-sm text-muted-foreground">Combined total</p>
-            <p className="font-serif text-2xl text-brand-green">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+          <div className="rounded-xl border border-brand-green/10 bg-white/90 px-4 sm:px-6 py-3 sm:py-4 text-center sm:text-right shadow-sm">
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Today&apos;s total
+            </p>
+            <p className="font-serif text-xl sm:text-2xl text-brand-green">
               {formatNaira(combinedTotal)}
             </p>
           </div>
           <AdminRecordSaleModal
             items={stock}
-            trigger={<Button size="lg">Record sale</Button>}
+            trigger={
+              <Button size="lg" className="w-full sm:w-auto">
+                Record sale
+              </Button>
+            }
           />
         </div>
       </div>
 
-      <div className="rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur">
+      {/* Desktop Table View */}
+      <div className="hidden sm:block rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Time</TableHead>
               <TableHead>Staff</TableHead>
-              <TableHead>Clocked in since</TableHead>
-              <TableHead className="text-right">Items sold</TableHead>
-              <TableHead className="text-right">Running total</TableHead>
+              <TableHead>Item</TableHead>
+              <TableHead className="text-right">Qty</TableHead>
+              <TableHead className="text-right">Unit price</TableHead>
+              <TableHead className="text-right">Total</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {activeShifts.map((shift) => (
-              <TableRow key={shift.id}>
-                <TableCell>
-                  <Link href={`/admin/sales/${shift.id}`} className="hover:underline">
-                    {shift.assistantName}
-                  </Link>
-                </TableCell>
+            {rows.map((row) => (
+              <TableRow key={row.id}>
                 <TableCell className="text-muted-foreground">
-                  {shift.startedAt.toLocaleString()}
+                  {row.soldAt.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </TableCell>
-                <TableCell className="text-right">{shift.itemsSold ?? 0}</TableCell>
+                <TableCell className="max-w-[150px] truncate">
+                  {row.staffLabel}
+                </TableCell>
+                <TableCell className="max-w-[200px] truncate">
+                  {row.itemName}
+                </TableCell>
+                <TableCell className="text-right">{row.quantitySold}</TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {formatNaira(row.unitPriceAtSale)}
+                </TableCell>
                 <TableCell className="text-right font-medium text-brand-green">
-                  {formatNaira(shift.total ?? 0)}
+                  {formatNaira(row.totalAmount)}
                 </TableCell>
               </TableRow>
             ))}
-            {activeShifts.length === 0 && (
+            {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                  No one is currently clocked in.
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center text-muted-foreground"
+                >
+                  No sales recorded today yet.
                 </TableCell>
               </TableRow>
             )}
@@ -142,43 +149,49 @@ export default async function CurrentSalesPage() {
         </Table>
       </div>
 
-      <div>
-        <h2 className="mb-2 font-serif text-lg text-brand-green">
-          Recorded by you today
-        </h2>
-        <div className="rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Time</TableHead>
-                <TableHead>Item</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {adminSalesToday.map((sale) => (
-                <TableRow key={sale.id}>
-                  <TableCell className="text-muted-foreground">
-                    {sale.soldAt.toLocaleTimeString()}
-                  </TableCell>
-                  <TableCell>{sale.itemName}</TableCell>
-                  <TableCell className="text-right">{sale.quantitySold}</TableCell>
-                  <TableCell className="text-right">
-                    {formatNaira(sale.totalAmount)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {adminSalesToday.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                    No admin-recorded sales today.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+      {/* Mobile Card View */}
+      <div className="sm:hidden space-y-3">
+        {rows.length === 0 ? (
+          <div className="rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur p-6 text-center text-muted-foreground">
+            No sales recorded today yet.
+          </div>
+        ) : (
+          rows.map((row) => (
+            <div
+              key={row.id}
+              className="rounded-xl border border-brand-green/10 bg-white/90 shadow-sm backdrop-blur p-4 space-y-3"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-medium truncate">{row.itemName}</h3>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {row.staffLabel}
+                  </p>
+                </div>
+                <span className="text-sm text-muted-foreground flex-shrink-0">
+                  {row.soldAt.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-sm">
+                <div className="space-x-4">
+                  <span className="text-muted-foreground">
+                    Qty: {row.quantitySold}
+                  </span>
+                  <span className="text-muted-foreground">
+                    @ {formatNaira(row.unitPriceAtSale)}
+                  </span>
+                </div>
+                <span className="font-medium text-brand-green">
+                  {formatNaira(row.totalAmount)}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

@@ -27,6 +27,25 @@ async function requireOwnActiveShift(shiftId: string) {
   if (!shift) throw new Error("This shift is no longer active.");
 }
 
+// Notes stay visible/editable for as long as they exist, regardless of
+// whether the shift that created them has since ended — only ownership
+// (this note belongs to one of *my* shifts) is required.
+async function requireOwnNote(noteId: string) {
+  const session = await auth();
+  if (session?.user?.role !== "sales") {
+    throw new Error("Unauthorized");
+  }
+
+  const [note] = await db
+    .select({ id: saleNotes.id })
+    .from(saleNotes)
+    .innerJoin(shifts, eq(saleNotes.shiftId, shifts.id))
+    .where(and(eq(saleNotes.id, noteId), eq(shifts.salesAssistantId, session.user.id)))
+    .limit(1);
+
+  if (!note) throw new Error("Note not found.");
+}
+
 export type SaleNoteFormState = { error?: string };
 
 type ParsedLine = { itemId: string; quantity: number };
@@ -87,6 +106,11 @@ async function resolveLineItems(lines: ParsedLine[]) {
   });
 }
 
+function revalidateNotePaths() {
+  revalidatePath("/sales/sales");
+  revalidatePath("/sales/notes");
+}
+
 export async function createSaleNote(
   shiftId: string,
   _prevState: SaleNoteFormState,
@@ -115,17 +139,16 @@ export async function createSaleNote(
     })),
   );
 
-  revalidatePath("/sales/sales");
+  revalidateNotePaths();
   return {};
 }
 
 export async function updateSaleNote(
-  shiftId: string,
   id: string,
   _prevState: SaleNoteFormState,
   formData: FormData,
 ): Promise<SaleNoteFormState> {
-  await requireOwnActiveShift(shiftId);
+  await requireOwnNote(id);
 
   const tableNumber = (formData.get("tableNumber") as string | null)?.trim();
   const isPaid = formData.get("isPaid") === "paid";
@@ -136,10 +159,7 @@ export async function updateSaleNote(
 
   const resolvedLines = await resolveLineItems(parsedLines);
 
-  await db
-    .update(saleNotes)
-    .set({ tableNumber, isPaid })
-    .where(and(eq(saleNotes.id, id), eq(saleNotes.shiftId, shiftId)));
+  await db.update(saleNotes).set({ tableNumber, isPaid }).where(eq(saleNotes.id, id));
 
   await db.delete(saleNoteItems).where(eq(saleNoteItems.noteId, id));
   await db.insert(saleNoteItems).values(
@@ -149,31 +169,22 @@ export async function updateSaleNote(
     })),
   );
 
-  revalidatePath("/sales/sales");
+  revalidateNotePaths();
   return {};
 }
 
-export async function setSaleNotePaid(
-  shiftId: string,
-  id: string,
-  isPaid: boolean,
-) {
-  await requireOwnActiveShift(shiftId);
+export async function setSaleNotePaid(id: string, isPaid: boolean) {
+  await requireOwnNote(id);
 
-  await db
-    .update(saleNotes)
-    .set({ isPaid })
-    .where(and(eq(saleNotes.id, id), eq(saleNotes.shiftId, shiftId)));
+  await db.update(saleNotes).set({ isPaid }).where(eq(saleNotes.id, id));
 
-  revalidatePath("/sales/sales");
+  revalidateNotePaths();
 }
 
-export async function deleteSaleNote(shiftId: string, id: string) {
-  await requireOwnActiveShift(shiftId);
+export async function deleteSaleNote(id: string) {
+  await requireOwnNote(id);
 
-  await db
-    .delete(saleNotes)
-    .where(and(eq(saleNotes.id, id), eq(saleNotes.shiftId, shiftId)));
+  await db.delete(saleNotes).where(eq(saleNotes.id, id));
 
-  revalidatePath("/sales/sales");
+  revalidateNotePaths();
 }

@@ -2,14 +2,7 @@ import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import {
-  categories,
-  items,
-  saleNoteItems,
-  saleNotes,
-  sales,
-  shifts,
-} from "@/lib/db/schema";
+import { categories, items, sales, shifts } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -20,8 +13,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { RecordSaleModal } from "@/components/sales/record-sale-modal";
-import { NoteFormModal } from "@/components/sales/note-form-modal";
-import { NotesList } from "@/components/sales/notes-list";
 import { formatNaira } from "@/lib/currency";
 
 export default async function SalesPage() {
@@ -36,27 +27,31 @@ export default async function SalesPage() {
 
   if (!activeShift) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 px-4 sm:px-0">
         <div>
-          <h1 className="font-serif text-2xl text-brand-green">Sales</h1>
-          <p className="text-muted-foreground">Record sales during your shift.</p>
+          <h1 className="font-serif text-2xl sm:text-3xl text-brand-green">
+            Sales
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Record sales during your shift.
+          </p>
         </div>
-        <div className="rounded-xl border border-brand-green/10 bg-white/90 p-10 text-center shadow-sm">
-          <p className="text-brand-charcoal">
+        <div className="rounded-xl border border-brand-green/10 bg-white/90 p-6 sm:p-10 text-center shadow-sm">
+          <p className="text-brand-charcoal text-sm sm:text-base">
             You&apos;re not on a shift right now.
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
             Start your shift on the Dashboard before recording sales.
           </p>
           <Link href="/sales" className="mt-4 inline-block">
-            <Button>Go to Dashboard</Button>
+            <Button className="w-full sm:w-auto">Go to Dashboard</Button>
           </Link>
         </div>
       </div>
     );
   }
 
-  const [stock, recentSales, noteRows] = await Promise.all([
+  const [stock, recentSales] = await Promise.all([
     db
       .select({
         id: items.id,
@@ -80,55 +75,19 @@ export default async function SalesPage() {
       .innerJoin(items, eq(sales.itemId, items.id))
       .where(eq(sales.shiftId, activeShift.id))
       .orderBy(desc(sales.soldAt)),
-    db
-      .select({
-        id: saleNotes.id,
-        tableNumber: saleNotes.tableNumber,
-        isPaid: saleNotes.isPaid,
-        itemId: saleNoteItems.itemId,
-        itemName: saleNoteItems.itemName,
-        quantity: saleNoteItems.quantity,
-        unitPrice: saleNoteItems.unitPrice,
-      })
-      .from(saleNotes)
-      .innerJoin(saleNoteItems, eq(saleNoteItems.noteId, saleNotes.id))
-      .where(eq(saleNotes.shiftId, activeShift.id))
-      .orderBy(desc(saleNotes.createdAt)),
   ]);
-
-  const notesMap = new Map<
-    string,
-    {
-      id: string;
-      tableNumber: string;
-      isPaid: boolean;
-      items: { itemId: string; itemName: string; unitPrice: string; quantity: number }[];
-    }
-  >();
-  for (const row of noteRows) {
-    const existing = notesMap.get(row.id);
-    const item = { itemId: row.itemId, itemName: row.itemName, unitPrice: row.unitPrice, quantity: row.quantity };
-    if (existing) {
-      existing.items.push(item);
-    } else {
-      notesMap.set(row.id, {
-        id: row.id,
-        tableNumber: row.tableNumber,
-        isPaid: row.isPaid,
-        items: [item],
-      });
-    }
-  }
-  const notes = Array.from(notesMap.values());
 
   const shiftTotal = recentSales.reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-6 px-4 sm:px-0">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-serif text-2xl text-brand-green">Sales</h1>
-          <p className="text-muted-foreground">
+          <h1 className="font-serif text-2xl sm:text-3xl text-brand-green">
+            Sales
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             This shift so far — {formatNaira(shiftTotal)}. Looking for older
             sales? See{" "}
             <Link href="/sales/history" className="underline">
@@ -137,67 +96,109 @@ export default async function SalesPage() {
             .
           </p>
         </div>
-        <div className="flex gap-2">
-          <NoteFormModal
-            shiftId={activeShift.id}
-            stock={stock}
-            trigger={<Button size="lg" variant="outline">Add note</Button>}
-          />
-          <RecordSaleModal
-            shiftId={activeShift.id}
-            items={stock}
-            trigger={<Button size="lg">Record sale</Button>}
-          />
+        <RecordSaleModal
+          shiftId={activeShift.id}
+          items={stock}
+          trigger={
+            <Button size="lg" className="w-full sm:w-auto">
+              Record sale
+            </Button>
+          }
+        />
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden sm:block">
+        <h2 className="mb-2 font-serif text-lg sm:text-xl text-brand-green">
+          Recent sales
+        </h2>
+        <div className="rounded-lg border bg-white/90 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>Item</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recentSales.map((sale) => (
+                <TableRow key={sale.id}>
+                  <TableCell className="text-muted-foreground">
+                    {sale.soldAt.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </TableCell>
+                  <TableCell className="max-w-[200px] truncate">
+                    {sale.itemName}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {sale.quantitySold}
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    {formatNaira(sale.totalAmount)}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {recentSales.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    No sales recorded yet this shift.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        <div>
-          <h2 className="mb-2 font-serif text-lg text-brand-green">Recent sales</h2>
-          <div className="rounded-lg border bg-white/90">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentSales.map((sale) => (
-                  <TableRow key={sale.id}>
-                    <TableCell className="text-muted-foreground">
-                      {sale.soldAt.toLocaleTimeString()}
-                    </TableCell>
-                    <TableCell>{sale.itemName}</TableCell>
-                    <TableCell className="text-right">{sale.quantitySold}</TableCell>
-                    <TableCell className="text-right">
-                      {formatNaira(sale.totalAmount)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {recentSales.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                      No sales recorded yet this shift.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+      {/* Mobile Card View */}
+      <div className="sm:hidden space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-serif text-lg text-brand-green">Recent sales</h2>
+          {recentSales.length > 0 && (
+            <span className="text-sm text-muted-foreground">
+              {recentSales.length} {recentSales.length === 1 ? "sale" : "sales"}
+            </span>
+          )}
         </div>
-
-        <div>
-          <h2 className="mb-2 font-serif text-lg text-brand-green">Notes</h2>
-          <p className="mb-2 text-sm text-muted-foreground">
-            Jot down what a table ordered before recording the sale.
-          </p>
-          <div className="rounded-lg border bg-white/90">
-            <NotesList shiftId={activeShift.id} notes={notes} stock={stock} />
+        {recentSales.length === 0 ? (
+          <div className="rounded-lg border bg-white/90 p-6 text-center text-muted-foreground">
+            No sales recorded yet this shift.
           </div>
-        </div>
+        ) : (
+          <div className="space-y-2">
+            {recentSales.map((sale) => (
+              <div
+                key={sale.id}
+                className="rounded-lg border bg-white/90 p-4 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-medium truncate">{sale.itemName}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Qty: {sale.quantitySold}
+                    </p>
+                  </div>
+                  <span className="font-medium text-brand-green whitespace-nowrap">
+                    {formatNaira(sale.totalAmount)}
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {sale.soldAt.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

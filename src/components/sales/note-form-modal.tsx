@@ -44,7 +44,8 @@ export function NoteFormModal({
   note,
   trigger,
 }: {
-  shiftId: string;
+  /** Required when creating a note (an active shift); unused when editing. */
+  shiftId?: string;
   stock: StockItem[];
   note?: Note;
   trigger: React.ReactElement;
@@ -63,7 +64,9 @@ export function NoteFormModal({
   const [lineQuantity, setLineQuantity] = useState("1");
   const [lineError, setLineError] = useState<string | null>(null);
 
-  const action = note ? updateSaleNote.bind(null, shiftId, note.id) : createSaleNote.bind(null, shiftId);
+  const action = note
+    ? updateSaleNote.bind(null, note.id)
+    : createSaleNote.bind(null, shiftId!);
 
   function resetAll() {
     setOpen(false);

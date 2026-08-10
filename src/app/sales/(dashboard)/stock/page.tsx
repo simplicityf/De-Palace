@@ -18,10 +18,12 @@ export default async function SalesStockPage() {
     .orderBy(categories.name, items.name);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 sm:px-0">
       <div>
-        <h1 className="font-serif text-2xl text-brand-green">Stock</h1>
-        <p className="text-muted-foreground">
+        <h1 className="font-serif text-2xl sm:text-3xl text-brand-green">
+          Stock
+        </h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
           Search or filter to find an item quickly.
         </p>
       </div>
