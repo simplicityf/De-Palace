@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import { items, sales, shifts, users } from "@/lib/db/schema";
-
-const recordedByUser = alias(users, "recorded_by_user");
 import {
   Table,
   TableBody,
@@ -22,29 +20,47 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { ExcludeFilter } from "@/components/admin/exclude-filter";
+import { Pagination } from "@/components/admin/pagination";
+import { StatCard } from "@/components/admin/stat-card";
 import { formatNaira } from "@/lib/currency";
+import {
+  getExcludeOptions,
+  getSalesSummary,
+  parseSalesFilters,
+  salesFiltersToParams,
+  salesWhere,
+} from "@/lib/reports/sales-filters";
+import { Package, Receipt, TrendingUp, Wallet } from "lucide-react";
+
+const recordedByUser = alias(users, "recorded_by_user");
+
+const PAGE_SIZE = 25;
 
 export default async function SalesHistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ staff?: string; from?: string; to?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { staff: staffFilter, from, to } = await searchParams;
+  const raw = await searchParams;
+  const filters = parseSalesFilters(raw);
+  const requestedPage = Number(Array.isArray(raw.page) ? raw.page[0] : raw.page);
 
-  const assistants = await db
-    .select({ id: users.id, name: users.name })
-    .from(users)
-    .where(eq(users.role, "sales"))
-    .orderBy(users.name);
+  const [assistants, excludeGroups, summary] = await Promise.all([
+    db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .where(eq(users.role, "sales"))
+      .orderBy(users.name),
+    getExcludeOptions(),
+    getSalesSummary(filters),
+  ]);
 
-  const conditions = [];
-  if (staffFilter) conditions.push(eq(shifts.salesAssistantId, staffFilter));
-  if (from) conditions.push(gte(sales.soldAt, new Date(`${from}T00:00:00`)));
-  if (to) {
-    const end = new Date(`${to}T00:00:00`);
-    end.setDate(end.getDate() + 1);
-    conditions.push(lt(sales.soldAt, end));
-  }
+  const totalPages = Math.max(1, Math.ceil(summary.count / PAGE_SIZE));
+  const page =
+    Number.isInteger(requestedPage) && requestedPage > 0
+      ? Math.min(requestedPage, totalPages)
+      : 1;
 
   const rawRows = await db
     .select({
@@ -61,53 +77,104 @@ export default async function SalesHistoryPage({
     .leftJoin(shifts, eq(sales.shiftId, shifts.id))
     .leftJoin(users, eq(shifts.salesAssistantId, users.id))
     .leftJoin(recordedByUser, eq(sales.recordedByUserId, recordedByUser.id))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(sales.soldAt));
+    .where(salesWhere(filters))
+    .orderBy(desc(sales.soldAt), desc(sales.id))
+    .limit(PAGE_SIZE)
+    .offset((page - 1) * PAGE_SIZE);
 
   const rows = rawRows.map((row) => ({
     ...row,
     staffLabel: row.shiftAssistantName ?? (row.recordedByName ? `${row.recordedByName} (Admin)` : "Admin"),
   }));
 
-  const grandTotal = rows.reduce((sum, row) => sum + Number(row.totalAmount), 0);
+  const filterParams = salesFiltersToParams(filters);
+  const isFiltered =
+    Boolean(filters.staff) ||
+    filters.excludeItems.length > 0 ||
+    filters.excludeCategories.length > 0 ||
+    "from" in raw ||
+    "to" in raw;
 
-  const exportParams = new URLSearchParams();
-  if (staffFilter) exportParams.set("staff", staffFilter);
-  if (from) exportParams.set("from", from);
-  if (to) exportParams.set("to", to);
+  const periodLabel =
+    filters.from && filters.to
+      ? `${filters.from} → ${filters.to}`
+      : filters.from
+        ? `Since ${filters.from}`
+        : filters.to
+          ? `Up to ${filters.to}`
+          : "All time";
+
+  const stats = [
+    {
+      label: "Total sales",
+      value: formatNaira(summary.salesTotal),
+      subtext: periodLabel,
+      icon: Wallet,
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-50",
+    },
+    {
+      label: "Revenue (profit)",
+      value: formatNaira(summary.profit),
+      subtext:
+        summary.uncostedCount > 0
+          ? `${summary.uncostedCount} sales without original price`
+          : summary.margin !== null
+            ? `${(summary.margin * 100).toFixed(1)}% margin`
+            : "No sales yet",
+      icon: TrendingUp,
+      color: summary.profit < 0 ? "text-destructive" : "text-purple-600",
+      bgColor: summary.profit < 0 ? "bg-red-50" : "bg-purple-50",
+    },
+    {
+      label: "Transactions",
+      value: summary.count,
+      subtext: "Sales recorded",
+      icon: Receipt,
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+    },
+    {
+      label: "Units sold",
+      value: summary.unitsSold,
+      subtext: "Across all items",
+      icon: Package,
+      color: "text-amber-600",
+      bgColor: "bg-amber-50",
+    },
+  ];
 
   return (
     <div className="space-y-6 px-4 sm:px-0">
       {/* Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="font-serif text-2xl sm:text-3xl text-brand-green">
-            Sales History
-          </h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
-            Every sale recorded across all staff.{" "}
-            <Link href="/admin/sales" className="underline">
-              View current sales
-            </Link>
-            .
-          </p>
-        </div>
-        <div className="rounded-xl border border-brand-green/10 bg-white/90 px-4 sm:px-6 py-3 sm:py-4 text-center sm:text-right shadow-sm">
-          <p className="text-xs sm:text-sm text-muted-foreground">Grand total</p>
-          <p className="font-serif text-xl sm:text-2xl text-brand-green">
-            {formatNaira(grandTotal)}
-          </p>
-        </div>
+      <div>
+        <h1 className="font-serif text-2xl sm:text-3xl text-brand-green">
+          Sales History
+        </h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
+          Every sale recorded across all staff — this month by default.{" "}
+          <Link href="/admin/sales" className="underline">
+            View current sales
+          </Link>
+          .
+        </p>
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
+        ))}
       </div>
 
       {/* Filter Form */}
       <form className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-3" method="get">
-        <div className="flex flex-col sm:flex-row gap-3 sm:flex-1">
+        <div className="flex flex-col sm:flex-row gap-3 sm:flex-1 sm:flex-wrap">
           <div className="space-y-1 flex-1 sm:flex-none">
             <label className="text-sm font-medium">Staff</label>
             <Select
               name="staff"
-              defaultValue={staffFilter}
+              defaultValue={filters.staff}
               items={assistants.map((a) => ({ value: a.id, label: a.name }))}
             >
               <SelectTrigger className="w-full sm:w-48 bg-white">
@@ -131,7 +198,7 @@ export default async function SalesHistoryPage({
                 id="from"
                 name="from"
                 type="date"
-                defaultValue={from}
+                defaultValue={filters.from}
                 className="h-9 w-full rounded-md border bg-white px-3 text-sm"
               />
             </div>
@@ -143,17 +210,22 @@ export default async function SalesHistoryPage({
                 id="to"
                 name="to"
                 type="date"
-                defaultValue={to}
+                defaultValue={filters.to}
                 className="h-9 w-full rounded-md border bg-white px-3 text-sm"
               />
             </div>
           </div>
+          <ExcludeFilter
+            groups={excludeGroups}
+            excludeItems={filters.excludeItems}
+            excludeCategories={filters.excludeCategories}
+          />
         </div>
         <div className="flex items-center gap-3">
           <Button type="submit" variant="outline" className="flex-1 sm:flex-none">
             Filter
           </Button>
-          {(staffFilter || from || to) && (
+          {isFiltered && (
             <Link
               href="/admin/sales/history"
               className="text-sm text-muted-foreground underline whitespace-nowrap"
@@ -162,7 +234,7 @@ export default async function SalesHistoryPage({
             </Link>
           )}
           <a
-            href={`/admin/sales/history/export?${exportParams.toString()}`}
+            href={`/admin/sales/history/export?${filterParams.toString()}`}
             className="sm:ml-auto"
           >
             <Button type="button" variant="outline" className="w-full sm:w-auto">
@@ -219,10 +291,10 @@ export default async function SalesHistoryPage({
             <TableFooter>
               <TableRow>
                 <TableCell colSpan={4} className="font-medium">
-                  Grand total
+                  Grand total{totalPages > 1 ? " (all pages)" : ""}
                 </TableCell>
                 <TableCell className="text-right font-medium text-brand-green">
-                  {formatNaira(grandTotal)}
+                  {formatNaira(summary.salesTotal)}
                 </TableCell>
               </TableRow>
             </TableFooter>
@@ -276,17 +348,24 @@ export default async function SalesHistoryPage({
                 </div>
               </div>
             ))}
-            {rows.length > 0 && (
-              <div className="rounded-xl border border-brand-green/10 bg-brand-green/5 p-4 flex items-center justify-between">
-                <span className="font-medium">Grand total</span>
-                <span className="font-serif text-lg font-medium text-brand-green">
-                  {formatNaira(grandTotal)}
-                </span>
-              </div>
-            )}
+            <div className="rounded-xl border border-brand-green/10 bg-brand-green/5 p-4 flex items-center justify-between">
+              <span className="font-medium">
+                Grand total{totalPages > 1 ? " (all pages)" : ""}
+              </span>
+              <span className="font-serif text-lg font-medium text-brand-green">
+                {formatNaira(summary.salesTotal)}
+              </span>
+            </div>
           </>
         )}
       </div>
+
+      <Pagination
+        pathname="/admin/sales/history"
+        params={filterParams}
+        page={page}
+        totalPages={totalPages}
+      />
     </div>
   );
 }

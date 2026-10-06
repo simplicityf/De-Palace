@@ -39,6 +39,8 @@ export const items = pgTable("items", {
     .notNull()
     .references(() => categories.id, { onDelete: "restrict" }),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  // Optional purchase cost per unit; profit = price - costPrice.
+  costPrice: numeric("cost_price", { precision: 10, scale: 2 }),
   quantity: integer("quantity").notNull().default(0),
   isArchived: boolean("is_archived").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -80,6 +82,9 @@ export const sales = pgTable("sales", {
     scale: 2,
   }).notNull(),
   totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull(),
+  // Snapshot of items.costPrice at sale time, so later cost edits don't
+  // rewrite past profit. Null when the item had no cost price set.
+  costPriceAtSale: numeric("cost_price_at_sale", { precision: 10, scale: 2 }),
   soldAt: timestamp("sold_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

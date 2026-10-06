@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { items } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
@@ -20,6 +20,7 @@ function parseItemForm(formData: FormData) {
   const categoryId = formData.get("categoryId") as string | null;
   const priceRaw = formData.get("price") as string | null;
   const quantityRaw = formData.get("quantity") as string | null;
+  const costPriceRaw = (formData.get("costPrice") as string | null)?.trim();
 
   if (!name) return { error: "Item name is required." } as const;
   if (!categoryId) return { error: "Category is required." } as const;
@@ -34,7 +35,37 @@ function parseItemForm(formData: FormData) {
     return { error: "Enter a valid whole-number quantity." } as const;
   }
 
-  return { name, categoryId, price, quantity } as const;
+  // Original (cost) price is optional — blank means "not set".
+  let costPrice: number | null = null;
+  if (costPriceRaw) {
+    costPrice = Number(costPriceRaw);
+    if (Number.isNaN(costPrice) || costPrice < 0) {
+      return { error: "Enter a valid original price, or leave it blank." } as const;
+    }
+  }
+
+  return { name, categoryId, price, quantity, costPrice } as const;
+}
+
+// Names are compared trimmed and case-insensitively; archived items don't
+// count, so an archived product's name can be reused.
+async function findDuplicateName(name: string, excludeId?: string) {
+  const [duplicate] = await db
+    .select({ name: items.name })
+    .from(items)
+    .where(
+      and(
+        eq(items.isArchived, false),
+        sql`lower(trim(${items.name})) = ${name.toLowerCase()}`,
+        excludeId ? ne(items.id, excludeId) : undefined,
+      ),
+    )
+    .limit(1);
+  return duplicate;
+}
+
+function duplicateError(name: string): ItemFormState {
+  return { error: `A product named "${name}" already exists.` };
 }
 
 export async function createItem(
@@ -46,10 +77,14 @@ export async function createItem(
   const parsed = parseItemForm(formData);
   if ("error" in parsed) return parsed;
 
+  const duplicate = await findDuplicateName(parsed.name);
+  if (duplicate) return duplicateError(duplicate.name);
+
   await db.insert(items).values({
     name: parsed.name,
     categoryId: parsed.categoryId,
     price: parsed.price.toFixed(2),
+    costPrice: parsed.costPrice?.toFixed(2) ?? null,
     quantity: parsed.quantity,
   });
 
@@ -67,12 +102,16 @@ export async function updateItem(
   const parsed = parseItemForm(formData);
   if ("error" in parsed) return parsed;
 
+  const duplicate = await findDuplicateName(parsed.name, id);
+  if (duplicate) return duplicateError(duplicate.name);
+
   await db
     .update(items)
     .set({
       name: parsed.name,
       categoryId: parsed.categoryId,
       price: parsed.price.toFixed(2),
+      costPrice: parsed.costPrice?.toFixed(2) ?? null,
       quantity: parsed.quantity,
       updatedAt: new Date(),
     })

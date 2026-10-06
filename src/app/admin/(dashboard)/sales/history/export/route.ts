@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import { items, sales, shifts, users } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { formatNaira } from "@/lib/currency";
+import {
+  getSalesSummary,
+  parseSalesFilters,
+  rawParamsFromURL,
+  salesWhere,
+} from "@/lib/reports/sales-filters";
 
 const recordedByUser = alias(users, "recorded_by_user");
 
@@ -22,19 +28,9 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const staffFilter = searchParams.get("staff") ?? undefined;
-  const from = searchParams.get("from") ?? undefined;
-  const to = searchParams.get("to") ?? undefined;
+  const filters = parseSalesFilters(rawParamsFromURL(searchParams));
 
-  const conditions = [];
-  if (staffFilter) conditions.push(eq(shifts.salesAssistantId, staffFilter));
-  if (from) conditions.push(gte(sales.soldAt, new Date(`${from}T00:00:00`)));
-  if (to) {
-    const end = new Date(`${to}T00:00:00`);
-    end.setDate(end.getDate() + 1);
-    conditions.push(lt(sales.soldAt, end));
-  }
-
+  const summaryPromise = getSalesSummary(filters);
   const rows = await db
     .select({
       soldAt: sales.soldAt,
@@ -49,10 +45,10 @@ export async function GET(request: NextRequest) {
     .leftJoin(shifts, eq(sales.shiftId, shifts.id))
     .leftJoin(users, eq(shifts.salesAssistantId, users.id))
     .leftJoin(recordedByUser, eq(sales.recordedByUserId, recordedByUser.id))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(salesWhere(filters))
     .orderBy(desc(sales.soldAt));
 
-  const grandTotal = rows.reduce((sum, row) => sum + Number(row.totalAmount), 0);
+  const summary = await summaryPromise;
 
   const header = ["Date", "Staff", "Item", "Qty", "Total"];
   const lines = [header.map(csvCell).join(",")];
@@ -72,7 +68,8 @@ export async function GET(request: NextRequest) {
         .join(","),
     );
   }
-  lines.push(["", "", "", "Grand total", formatNaira(grandTotal)].map(csvCell).join(","));
+  lines.push(["", "", "", "Grand total", formatNaira(summary.salesTotal)].map(csvCell).join(","));
+  lines.push(["", "", "", "Revenue (profit)", formatNaira(summary.profit)].map(csvCell).join(","));
 
   const csv = lines.join("\n");
   const filename = `depalace-sales-history-${new Date().toISOString().slice(0, 10)}.csv`;

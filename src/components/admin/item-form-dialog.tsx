@@ -28,22 +28,29 @@ type Item = {
   name: string;
   categoryId: string;
   price: string;
+  costPrice: string | null;
   quantity: number;
 };
+
+type ExistingItem = { id: string; name: string };
 
 export function ItemFormDialog({
   categories,
   action,
   item,
+  existingItems = [],
   trigger,
 }: {
   categories: Category[];
+  existingItems?: ExistingItem[];
   action: (state: ItemFormState, formData: FormData) => Promise<ItemFormState>;
   item?: Item;
   trigger: React.ReactElement;
 }) {
   const [open, setOpen] = useState(false);
+  const [name, setName] = useState(item?.name ?? "");
   const [price, setPrice] = useState(item?.price ?? "");
+  const [costPrice, setCostPrice] = useState(item?.costPrice ?? "");
   const [quantity, setQuantity] = useState(item?.quantity?.toString() ?? "");
   const [state, formAction, pending] = useActionState<ItemFormState, FormData>(
     async (prevState, formData) => {
@@ -55,6 +62,18 @@ export function ItemFormDialog({
   );
 
   const total = (Number(price) || 0) * (Number(quantity) || 0);
+  const marginPerUnit =
+    costPrice !== "" && price !== "" ? Number(price) - Number(costPrice) : null;
+
+  // Live hint only — the server action does the authoritative check.
+  const normalizedName = name.trim().toLowerCase();
+  const duplicate = normalizedName
+    ? existingItems.find(
+        (existing) =>
+          existing.id !== item?.id &&
+          existing.name.trim().toLowerCase() === normalizedName,
+      )
+    : undefined;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -67,7 +86,19 @@ export function ItemFormDialog({
         <form action={formAction} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
-            <Input id="name" name="name" defaultValue={item?.name} required />
+            <Input
+              id="name"
+              name="name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              aria-invalid={duplicate ? true : undefined}
+              required
+            />
+            {duplicate && (
+              <p role="alert" className="text-sm text-amber-600">
+                Product name &quot;{duplicate.name}&quot; already exists.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -122,6 +153,34 @@ export function ItemFormDialog({
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="costPrice">
+              Original price (₦){" "}
+              <span className="font-normal text-muted-foreground">— optional</span>
+            </Label>
+            <Input
+              id="costPrice"
+              name="costPrice"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="What you paid per unit"
+              value={costPrice}
+              onChange={(event) => setCostPrice(event.target.value)}
+            />
+            {marginPerUnit !== null && (
+              <p
+                className={
+                  marginPerUnit < 0
+                    ? "text-xs text-destructive"
+                    : "text-xs text-muted-foreground"
+                }
+              >
+                Profit per unit: {formatNaira(marginPerUnit)}
+              </p>
+            )}
+          </div>
+
           <p className="text-sm text-muted-foreground">
             Total stock value: <span className="font-medium text-foreground">{formatNaira(total)}</span>
           </p>
@@ -132,7 +191,7 @@ export function ItemFormDialog({
             </p>
           )}
 
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button type="submit" className="w-full" disabled={pending || Boolean(duplicate)}>
             {pending ? "Saving…" : item ? "Save changes" : "Add item"}
           </Button>
         </form>

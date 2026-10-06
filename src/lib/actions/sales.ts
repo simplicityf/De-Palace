@@ -35,7 +35,7 @@ async function decrementStockAndRecordSale(
       updatedAt: new Date(),
     })
     .where(and(eq(items.id, itemId), gte(items.quantity, quantitySold)))
-    .returning({ price: items.price });
+    .returning({ price: items.price, costPrice: items.costPrice });
 
   if (!updated) {
     return { error: "Not enough stock left for that quantity." };
@@ -49,6 +49,7 @@ async function decrementStockAndRecordSale(
     quantitySold,
     unitPriceAtSale: unitPrice.toFixed(2),
     totalAmount: (unitPrice * quantitySold).toFixed(2),
+    costPriceAtSale: updated.costPrice,
   });
 
   return {};

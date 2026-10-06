@@ -24,3 +24,22 @@ export function lastNBusinessDateKeys(n: number): string[] {
   }
   return keys;
 }
+
+/** Instant at which a business-timezone calendar date (YYYY-MM-DD) begins. */
+export function businessDateStart(key: string): Date {
+  return new Date(`${key}T00:00:00+01:00`);
+}
+
+/**
+ * First and last calendar dates (YYYY-MM-DD) of a business-timezone month.
+ * offset 0 = this month, -1 = previous month.
+ */
+export function businessMonthRange(offset = 0): { from: string; to: string } {
+  const [year, month] = businessDateKey().split("-").map(Number);
+  const first = new Date(Date.UTC(year, month - 1 + offset, 1));
+  const last = new Date(Date.UTC(year, month + offset, 0));
+  return {
+    from: first.toISOString().slice(0, 10),
+    to: last.toISOString().slice(0, 10),
+  };
+}

@@ -12,6 +12,7 @@ const navLinks = [
   { href: "/admin/staff", label: "Staff" },
   { href: "/admin/sales", label: "Sales" },
   { href: "/admin/sales/history", label: "History" },
+  { href: "/admin/revenue", label: "Revenue" },
   { href: "/admin/qr", label: "QR Code" },
   { href: "/admin/account", label: "Account" },
 ];

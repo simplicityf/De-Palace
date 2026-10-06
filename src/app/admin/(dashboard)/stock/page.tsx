@@ -25,6 +25,7 @@ export default async function StockPage() {
         id: items.id,
         name: items.name,
         price: items.price,
+        costPrice: items.costPrice,
         quantity: items.quantity,
         categoryId: items.categoryId,
         categoryName: categories.name,
@@ -98,6 +99,7 @@ export default async function StockPage() {
           <ItemFormDialog
             categories={categoryRows}
             action={createItem}
+            existingItems={rows}
             trigger={
               <Button className="w-full sm:w-auto shadow-sm hover:shadow-md transition-shadow">
                 <Plus className="w-4 h-4 mr-2" />
@@ -183,6 +185,7 @@ export default async function StockPage() {
                 <ItemFormDialog
                   categories={categoryRows}
                   action={createItem}
+            existingItems={rows}
                   trigger={
                     <Button variant="outline" size="lg">
                       <Plus className="w-4 h-4 mr-2" />

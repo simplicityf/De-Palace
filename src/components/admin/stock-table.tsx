@@ -24,6 +24,7 @@ type Item = {
   categoryId: string;
   categoryName: string;
   price: string;
+  costPrice: string | null;
   quantity: number;
 };
 
@@ -44,6 +45,18 @@ export function StockTable({
     () => ["All", ...Array.from(new Set(items.map((i) => i.categoryName)))],
     [items],
   );
+
+  // Flags names that already appear more than once (e.g. added before the
+  // duplicate check existed), so they can be cleaned up.
+  const duplicateNames = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      const key = item.name.trim().toLowerCase();
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return new Set([...counts].filter(([, n]) => n > 1).map(([key]) => key));
+  }, [items]);
+  const isDuplicate = (item: Item) => duplicateNames.has(item.name.trim().toLowerCase());
 
   const filtered = items.filter((item) => {
     const matchesQuery = item.name.toLowerCase().includes(query.toLowerCase());
@@ -186,6 +199,7 @@ export function StockTable({
               <TableHead className="px-4 sm:px-6">Name</TableHead>
               <TableHead className="px-4 sm:px-6">Category</TableHead>
               <TableHead className="text-right px-4 sm:px-6">Price</TableHead>
+              <TableHead className="text-right px-4 sm:px-6">Original price</TableHead>
               <TableHead className="text-right px-4 sm:px-6">Quantity</TableHead>
               <TableHead className="text-right px-4 sm:px-6">Total value</TableHead>
               <TableHead className="text-right px-4 sm:px-6">Actions</TableHead>
@@ -196,12 +210,16 @@ export function StockTable({
               <TableRow key={item.id}>
                 <TableCell className="font-medium px-4 sm:px-6 max-w-[200px] truncate">
                   {item.name}
+                  {isDuplicate(item) && <DuplicateBadge />}
                 </TableCell>
                 <TableCell className="text-muted-foreground px-4 sm:px-6">
                   {item.categoryName}
                 </TableCell>
                 <TableCell className="text-right px-4 sm:px-6">
                   {formatNaira(item.price)}
+                </TableCell>
+                <TableCell className="text-right px-4 sm:px-6 text-muted-foreground">
+                  {item.costPrice === null ? "—" : formatNaira(item.costPrice)}
                 </TableCell>
                 <TableCell className="text-right px-4 sm:px-6">
                   {item.quantity <= 5 ? (
@@ -221,6 +239,7 @@ export function StockTable({
                       categories={categories}
                       action={updateItem.bind(null, item.id)}
                       item={item}
+                      existingItems={items}
                       trigger={
                         <Button size="sm" variant="outline">
                           Edit
@@ -235,7 +254,7 @@ export function StockTable({
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="py-6 text-center text-muted-foreground px-4 sm:px-6"
                 >
                   No items match.
@@ -255,7 +274,10 @@ export function StockTable({
           >
             <div className="flex items-start justify-between gap-2 min-w-0">
               <div className="min-w-0 flex-1">
-                <h3 className="font-medium text-sm truncate">{item.name}</h3>
+                <h3 className="font-medium text-sm truncate">
+                  {item.name}
+                  {isDuplicate(item) && <DuplicateBadge />}
+                </h3>
                 <p className="text-xs text-muted-foreground truncate">
                   {item.categoryName}
                 </p>
@@ -265,6 +287,7 @@ export function StockTable({
                   categories={categories}
                   action={updateItem.bind(null, item.id)}
                   item={item}
+                  existingItems={items}
                   trigger={
                     <Button size="sm" variant="outline" className="text-xs">
                       Edit
@@ -275,10 +298,16 @@ export function StockTable({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-3 gap-3 text-sm">
               <div className="min-w-0">
                 <span className="text-xs text-muted-foreground block">Price</span>
                 <p className="font-medium truncate">{formatNaira(item.price)}</p>
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs text-muted-foreground block">Original</span>
+                <p className="font-medium truncate text-muted-foreground">
+                  {item.costPrice === null ? "—" : formatNaira(item.costPrice)}
+                </p>
               </div>
               <div className="min-w-0">
                 <span className="text-xs text-muted-foreground block">Quantity</span>
@@ -308,5 +337,16 @@ export function StockTable({
         )}
       </div>
     </div>
+  );
+}
+
+function DuplicateBadge() {
+  return (
+    <span
+      title="Another product has the same name"
+      className="ml-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 align-middle"
+    >
+      Duplicate
+    </span>
   );
 }
