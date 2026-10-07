@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { items, sales, shifts } from "@/lib/db/schema";
+import { items, sales, shiftReports, shifts } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 
 export type SaleFormState = { error?: string };
@@ -118,5 +118,45 @@ export async function recordAdminSale(
   revalidatePath("/admin/sales");
   revalidatePath("/admin/sales/history");
   revalidatePath("/admin/stock");
+  return {};
+}
+
+// One statement (writable CTEs) so it's atomic over neon-http: removes the
+// sale, puts its quantity back into stock, and keeps the stored shift report
+// total in sync.
+export async function deleteSale(id: string): Promise<SaleFormState> {
+  const session = await auth();
+  if (session?.user?.role !== "admin") {
+    throw new Error("Unauthorized");
+  }
+
+  const result = await db.execute<{ deleted: number }>(sql`
+    with deleted as (
+      delete from ${sales} where ${sales.id} = ${id}
+      returning item_id, quantity_sold, shift_id, total_amount
+    ),
+    restocked as (
+      update ${items} set quantity = ${items.quantity} + d.quantity_sold, updated_at = now()
+      from deleted d where ${items.id} = d.item_id
+      returning ${items.id}
+    ),
+    report as (
+      update ${shiftReports} set total_sales_amount = ${shiftReports.totalSalesAmount} - d.total_amount
+      from deleted d where ${shiftReports.shiftId} = d.shift_id
+      returning ${shiftReports.id}
+    )
+    select count(*)::int as deleted from deleted
+  `);
+
+  if (!result.rows[0]?.deleted) {
+    return { error: "That sale no longer exists." };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/sales");
+  revalidatePath("/admin/sales/history");
+  revalidatePath("/admin/revenue");
+  revalidatePath("/admin/stock");
+  revalidatePath("/sales", "layout");
   return {};
 }

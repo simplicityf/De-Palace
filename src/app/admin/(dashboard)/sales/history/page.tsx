@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { DeleteSaleButton } from "@/components/admin/delete-sale-button";
 import { ExcludeFilter } from "@/components/admin/exclude-filter";
 import { Pagination } from "@/components/admin/pagination";
 import { StatCard } from "@/components/admin/stat-card";
@@ -85,6 +86,7 @@ export default async function SalesHistoryPage({
   const rows = rawRows.map((row) => ({
     ...row,
     staffLabel: row.shiftAssistantName ?? (row.recordedByName ? `${row.recordedByName} (Admin)` : "Admin"),
+    deleteDescription: `${row.quantitySold} × ${row.itemName} (${formatNaira(row.totalAmount)}) on ${row.soldAt.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`,
   }));
 
   const filterParams = salesFiltersToParams(filters);
@@ -254,6 +256,7 @@ export default async function SalesHistoryPage({
               <TableHead>Item</TableHead>
               <TableHead className="text-right">Qty</TableHead>
               <TableHead className="text-right">Total</TableHead>
+              <TableHead className="w-12"><span className="sr-only">Actions</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -277,11 +280,14 @@ export default async function SalesHistoryPage({
                 <TableCell className="text-right font-medium">
                   {formatNaira(row.totalAmount)}
                 </TableCell>
+                <TableCell className="text-right">
+                  <DeleteSaleButton id={row.id} description={row.deleteDescription} />
+                </TableCell>
               </TableRow>
             ))}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                   No sales found.
                 </TableCell>
               </TableRow>
@@ -296,6 +302,7 @@ export default async function SalesHistoryPage({
                 <TableCell className="text-right font-medium text-brand-green">
                   {formatNaira(summary.salesTotal)}
                 </TableCell>
+                <TableCell />
               </TableRow>
             </TableFooter>
           )}
@@ -322,12 +329,15 @@ export default async function SalesHistoryPage({
                       {row.staffLabel}
                     </p>
                   </div>
-                  <span className="text-sm text-muted-foreground whitespace-nowrap flex-shrink-0">
-                    {row.soldAt.toLocaleDateString([], {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </span>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                      {row.soldAt.toLocaleDateString([], {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                    <DeleteSaleButton id={row.id} description={row.deleteDescription} />
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
